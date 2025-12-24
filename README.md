@@ -7,7 +7,7 @@ A Rust CLI tool that validates SQLite databases and WAL (Write-Ahead Log) files 
 This tool parses a SQLite database file and its associated WAL file, iterating through each commit to detect B-tree corruption in the form of duplicate entries:
 
 - **Duplicate rowids** in table B-trees
-- **Duplicate keys** in index B-trees
+- **Duplicate keys** in index B-trees (experimental, opt-in)
 
 Duplicates can occur either within a single page (intra-page) or across multiple pages (inter-page) of the same B-tree.
 
@@ -31,6 +31,7 @@ wal-validator --database <path-to-db> [--wal <path-to-wal>]
 |--------|-------------|
 | `-d, --database <PATH>` | Path to the SQLite database file (.db) |
 | `-w, --wal <PATH>` | Path to the WAL file (defaults to `<database>-wal`) |
+| `--check-indexes` | Also check index B-trees for duplicate keys (experimental) |
 | `-h, --help` | Print help |
 | `-V, --version` | Print version |
 
@@ -97,7 +98,7 @@ Summary: 2 duplicates found (1 in base DB, 1 in WAL commits)
    - Applies frame pages to the page cache (overlay)
    - Re-discovers B-trees (schema may have changed)
    - Scans all table B-trees for duplicate rowids
-   - Scans all index B-trees for duplicate keys
+   - Optionally scans index B-trees for duplicate keys (if `--check-indexes`)
 6. **Report findings** - Outputs any duplicates with their locations
 
 ## Technical Details
@@ -122,6 +123,7 @@ Summary: 2 duplicates found (1 in base DB, 1 in WAL commits)
 - Does not handle overflow pages (large payloads are skipped)
 - Does not validate WITHOUT ROWID tables
 - Assumes valid page structure (may panic on severely corrupted data)
+- **Index checking is experimental** and may produce false positives due to incomplete key parsing (disabled by default, enable with `--check-indexes`)
 
 ## Development
 

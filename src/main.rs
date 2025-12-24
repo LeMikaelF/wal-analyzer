@@ -18,6 +18,10 @@ struct Cli {
     /// Path to the WAL file (defaults to <database>-wal)
     #[arg(short, long)]
     wal: Option<PathBuf>,
+
+    /// Also check index B-trees for duplicate keys (experimental, may have false positives)
+    #[arg(long, default_value = "false")]
+    check_indexes: bool,
 }
 
 fn main() -> ExitCode {
@@ -59,7 +63,7 @@ fn main() -> ExitCode {
     print_header(&cli.database, &wal_path, page_size);
 
     // Run validation
-    match wal_validator::validate(&cli.database, &wal_path) {
+    match wal_validator::validate(&cli.database, &wal_path, cli.check_indexes) {
         Ok((reports, total_commits)) => {
             // Print each duplicate report
             for report in &reports {

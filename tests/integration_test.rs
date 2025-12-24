@@ -46,8 +46,8 @@ fn test_validate_no_duplicates() {
         return;
     }
 
-    // Run validation
-    let result = wal_validator::validate(&db_path, &wal_path);
+    // Run validation (don't check indexes)
+    let result = wal_validator::validate(&db_path, &wal_path, false);
     match result {
         Ok((reports, commits)) => {
             println!("Processed {} commits", commits);

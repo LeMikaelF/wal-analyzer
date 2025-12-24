@@ -16,7 +16,10 @@ use crate::validator::{
 use crate::wal::CommitIterator;
 
 /// Validate a SQLite database and WAL file for duplicate rowids/keys
-pub fn validate(db_path: &Path, wal_path: &Path) -> Result<(Vec<DuplicateReport>, u64)> {
+///
+/// If `check_indexes` is true, also checks index B-trees for duplicate keys.
+/// Note: Index checking is experimental and may produce false positives.
+pub fn validate(db_path: &Path, wal_path: &Path, check_indexes: bool) -> Result<(Vec<DuplicateReport>, u64)> {
     // Verify files exist
     if !db_path.exists() {
         return Err(WalValidatorError::DatabaseNotFound(db_path.to_path_buf()));
@@ -40,6 +43,11 @@ pub fn validate(db_path: &Path, wal_path: &Path) -> Result<(Vec<DuplicateReport>
         let btrees = scanner.discover_btrees()?;
 
         for btree in btrees {
+            // Skip indexes unless check_indexes is enabled
+            if !btree.is_table && !check_indexes {
+                continue;
+            }
+
             let report = if btree.is_table {
                 scan_table_for_duplicates(&mut scanner, &btree, None)?
             } else {
@@ -75,6 +83,11 @@ pub fn validate(db_path: &Path, wal_path: &Path) -> Result<(Vec<DuplicateReport>
         let btrees = scanner.discover_btrees()?;
 
         for btree in btrees {
+            // Skip indexes unless check_indexes is enabled
+            if !btree.is_table && !check_indexes {
+                continue;
+            }
+
             let report = if btree.is_table {
                 scan_table_for_duplicates(&mut scanner, &btree, Some(commit.index))?
             } else {
