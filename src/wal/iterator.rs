@@ -38,8 +38,9 @@ impl CommitIterator {
         file.read_exact(&mut header_bytes)?;
         let wal_header = WalHeader::parse(&header_bytes)?;
 
-        // Initial checksum is from the header (first 24 bytes)
-        let initial_checksum = wal_header.checksum(&header_bytes[0..24], (0, 0));
+        // Initial checksum for frames uses the header checksums (bytes 24-31),
+        // NOT the salt values
+        let initial_checksum = (wal_header.checksum1, wal_header.checksum2);
 
         Ok(CommitIterator {
             file,

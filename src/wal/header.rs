@@ -49,10 +49,12 @@ impl WalHeader {
         }
 
         // First 4 bytes are magic - determines endianness
+        // 0x377f0682: WAL created on little-endian machine (checksum uses LE reads)
+        // 0x377f0683: WAL created on big-endian machine (checksum uses BE reads)
         let magic = BigEndian::read_u32(&data[0..4]);
         let big_endian_checksums = match magic {
-            WAL_MAGIC_BE => true,
-            WAL_MAGIC_LE => false,
+            WAL_MAGIC_BE => false,  // 0x377f0682 = created on LE machine
+            WAL_MAGIC_LE => true,   // 0x377f0683 = created on BE machine
             _ => return Err(WalValidatorError::InvalidWalMagic(magic)),
         };
 
