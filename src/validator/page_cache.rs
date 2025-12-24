@@ -15,8 +15,8 @@ pub struct PageCache {
     page_size: u32,
     /// Total pages in base database
     db_page_count: u32,
-    /// WAL overlay: page number -> page data
-    overlay: HashMap<u32, Vec<u8>>,
+    /// WAL overlay: page number -> (page data, frame index that last modified it)
+    overlay: HashMap<u32, (Vec<u8>, u64)>,
     /// Page reader for base database
     page_reader: PageReader,
 }
@@ -36,7 +36,7 @@ impl PageCache {
     /// Get a page, checking WAL overlay first, then base database
     pub fn get_page(&mut self, page_num: u32) -> Result<Vec<u8>> {
         // Check WAL overlay first
-        if let Some(page) = self.overlay.get(&page_num) {
+        if let Some((page, _frame_idx)) = self.overlay.get(&page_num) {
             return Ok(page.clone());
         }
 
@@ -50,11 +50,18 @@ impl PageCache {
         Ok(vec![0u8; self.page_size as usize])
     }
 
+    /// Get the frame index that last modified a page (None if from base DB)
+    pub fn get_frame_index(&self, page_num: u32) -> Option<u64> {
+        self.overlay.get(&page_num).map(|(_, frame_idx)| *frame_idx)
+    }
+
     /// Apply a commit's frames to the overlay
     pub fn apply_commit(&mut self, commit: &Commit) {
         for frame in &commit.frames {
-            self.overlay
-                .insert(frame.header.page_number, frame.page_data.clone());
+            self.overlay.insert(
+                frame.header.page_number,
+                (frame.page_data.clone(), frame.frame_index),
+            );
         }
     }
 

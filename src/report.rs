@@ -60,20 +60,29 @@ pub fn print_duplicate_report(report: &DuplicateReport) {
     }
 }
 
+fn format_location(loc: &crate::btree::RowidLocation, is_intra_page_last: bool) -> String {
+    let frame_str = match loc.frame_index {
+        Some(idx) => format!(" (frame {})", idx),
+        None => " (base db)".to_string(),
+    };
+    let intra_page = if is_intra_page_last {
+        "  [Intra-page]".yellow().to_string()
+    } else {
+        String::new()
+    };
+    format!(
+        "    - Page {}, Cell {}{}{}",
+        loc.page_number, loc.cell_index, frame_str, intra_page
+    )
+}
+
 fn print_rowid_duplicate(dup: &DuplicateEntry<i64>) {
     println!("  Rowid {}:", format!("{}", dup.key).green());
 
     for loc in &dup.locations {
-        let intra_page = if dup.is_intra_page() && loc == dup.locations.last().unwrap() {
-            "  [Intra-page]".yellow().to_string()
-        } else {
-            String::new()
-        };
-
-        println!(
-            "    - Page {}, Cell {}{}",
-            loc.page_number, loc.cell_index, intra_page
-        );
+        let is_last = loc == dup.locations.last().unwrap();
+        let is_intra_page_last = dup.is_intra_page() && is_last;
+        println!("{}", format_location(loc, is_intra_page_last));
     }
     println!();
 }
@@ -82,16 +91,9 @@ fn print_key_duplicate(dup: &DuplicateEntry<IndexKey>) {
     println!("  Key {}:", format!("{}", dup.key).green());
 
     for loc in &dup.locations {
-        let intra_page = if dup.is_intra_page() && loc == dup.locations.last().unwrap() {
-            "  [Intra-page]".yellow().to_string()
-        } else {
-            String::new()
-        };
-
-        println!(
-            "    - Page {}, Cell {}{}",
-            loc.page_number, loc.cell_index, intra_page
-        );
+        let is_last = loc == dup.locations.last().unwrap();
+        let is_intra_page_last = dup.is_intra_page() && is_last;
+        println!("{}", format_location(loc, is_intra_page_last));
     }
     println!();
 }

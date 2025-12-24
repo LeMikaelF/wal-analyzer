@@ -23,6 +23,8 @@ pub struct RowidLocation {
     pub page_number: u32,
     /// Cell index within the page
     pub cell_index: u16,
+    /// Frame index that last modified this page (None if from base DB)
+    pub frame_index: Option<u64>,
 }
 
 /// Scanner for traversing B-trees and collecting rowids/keys
@@ -267,6 +269,7 @@ impl<'a> BTreeScanner<'a> {
         let mut stack = vec![root_page];
 
         while let Some(page_num) = stack.pop() {
+            let frame_index = self.page_cache.get_frame_index(page_num);
             let page_data = self.page_cache.get_page(page_num)?;
             let (header, _) = BTreePageHeader::parse(&page_data, page_num)?;
 
@@ -292,6 +295,7 @@ impl<'a> BTreeScanner<'a> {
                             RowidLocation {
                                 page_number: page_num,
                                 cell_index: cell_idx as u16,
+                                frame_index,
                             },
                         ));
                     }
@@ -333,6 +337,7 @@ impl<'a> BTreeScanner<'a> {
         let mut stack = vec![root_page];
 
         while let Some(page_num) = stack.pop() {
+            let frame_index = self.page_cache.get_frame_index(page_num);
             let page_data = self.page_cache.get_page(page_num)?;
             let (header, _) = BTreePageHeader::parse(&page_data, page_num)?;
 
@@ -364,6 +369,7 @@ impl<'a> BTreeScanner<'a> {
                                 RowidLocation {
                                     page_number: page_num,
                                     cell_index: cell_idx as u16,
+                                    frame_index,
                                 },
                             ));
                         }
