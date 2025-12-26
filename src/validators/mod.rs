@@ -44,8 +44,7 @@ use crate::validator::PageCache;
 /// Configuration for validators.
 #[derive(Debug, Clone, Default)]
 pub struct ValidatorConfig {
-    /// Whether to check index B-trees for duplicate keys.
-    pub check_indexes: bool,
+    // Reserved for future configuration options
 }
 
 /// Context provided to validators during validation.

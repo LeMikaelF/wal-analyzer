@@ -93,20 +93,3 @@ pub fn validate(
 
     Ok((all_issues, total_commits))
 }
-
-/// Validate a SQLite database and WAL file for duplicate rowids/keys.
-///
-/// This is a convenience wrapper around `validate()` that maintains backward
-/// compatibility with the old API.
-///
-/// If `check_indexes` is true, also checks index B-trees for duplicate keys.
-/// Note: Index checking is experimental and may produce false positives.
-#[deprecated(since = "0.2.0", note = "Use validate() with ValidatorConfig instead")]
-pub fn validate_legacy(
-    db_path: &Path,
-    wal_path: &Path,
-    check_indexes: bool,
-) -> Result<(Vec<ValidationIssue>, u64)> {
-    let config = ValidatorConfig { check_indexes };
-    validate(db_path, wal_path, &config)
-}

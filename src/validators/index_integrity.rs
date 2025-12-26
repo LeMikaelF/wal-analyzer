@@ -12,7 +12,7 @@ use std::collections::HashSet;
 use crate::btree::BTreeInfo;
 use crate::error::Result;
 
-use super::{IssueLocation, Severity, ValidationContext, ValidationIssue, Validator, ValidatorConfig};
+use super::{IssueLocation, Severity, ValidationContext, ValidationIssue, Validator};
 
 /// Validator that checks index integrity against tables.
 pub struct IndexIntegrityValidator;
@@ -187,9 +187,5 @@ impl Validator for IndexIntegrityValidator {
         }
 
         Ok(issues)
-    }
-
-    fn is_enabled(&self, config: &ValidatorConfig) -> bool {
-        config.check_indexes
     }
 }

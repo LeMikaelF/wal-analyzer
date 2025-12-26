@@ -3,7 +3,7 @@
 use crate::error::Result;
 
 use super::duplicate_rowid::find_duplicates;
-use super::{ValidationContext, ValidationIssue, Validator, ValidatorConfig};
+use super::{ValidationContext, ValidationIssue, Validator};
 
 /// Validator that detects duplicate keys in unique index B-trees.
 ///
@@ -67,9 +67,5 @@ impl Validator for DuplicateIndexKeyValidator {
         }
 
         Ok(issues)
-    }
-
-    fn is_enabled(&self, config: &ValidatorConfig) -> bool {
-        config.check_indexes
     }
 }
