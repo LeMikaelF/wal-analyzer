@@ -48,6 +48,11 @@ pub fn validate(db_path: &Path, wal_path: &Path, check_indexes: bool) -> Result<
                 continue;
             }
 
+            // Skip non-unique indexes - duplicate keys are valid in non-unique indexes
+            if !btree.is_table && !btree.is_unique {
+                continue;
+            }
+
             let report = if btree.is_table {
                 scan_table_for_duplicates(&mut scanner, &btree, None)?
             } else {
@@ -85,6 +90,11 @@ pub fn validate(db_path: &Path, wal_path: &Path, check_indexes: bool) -> Result<
         for btree in btrees {
             // Skip indexes unless check_indexes is enabled
             if !btree.is_table && !check_indexes {
+                continue;
+            }
+
+            // Skip non-unique indexes - duplicate keys are valid in non-unique indexes
+            if !btree.is_table && !btree.is_unique {
                 continue;
             }
 

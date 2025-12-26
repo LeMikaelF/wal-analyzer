@@ -14,6 +14,8 @@ pub struct BTreeInfo {
     pub name: Option<String>,
     /// True if this is a table, false if index
     pub is_table: bool,
+    /// True if this is a unique index (only relevant for indexes)
+    pub is_unique: bool,
 }
 
 /// Location of a rowid or key within a B-tree
@@ -157,13 +159,36 @@ impl<'a> BTreeScanner<'a> {
         // Column 3: rootpage (INTEGER)
         let rootpage = self.read_int_column(payload, &serial_types, &column_offsets, 3)?;
 
-        if let (Some(obj_type), Some(name), Some(root_page)) = (type_col, name_col, rootpage) {
+        // Column 4: sql (TEXT) - used to determine if index is unique
+        let sql_col = self.read_text_column(payload, &serial_types, &column_offsets, 4)?;
+
+        if let (Some(obj_type), Some(ref name), Some(root_page)) = (type_col, name_col, rootpage) {
             let root_page = root_page as u32;
             if root_page > 0 && (obj_type == "table" || obj_type == "index") {
+                // Determine if index is unique:
+                // - Autoindexes (created for PRIMARY KEY/UNIQUE constraints) are always unique
+                // - For explicit indexes, check if SQL contains "UNIQUE"
+                let is_unique = if obj_type == "index" {
+                    if name.starts_with("sqlite_autoindex_") {
+                        // Autoindexes are created for PRIMARY KEY and UNIQUE constraints
+                        true
+                    } else if let Some(ref sql) = sql_col {
+                        // Check if the CREATE INDEX statement includes UNIQUE
+                        sql.to_uppercase().contains("UNIQUE")
+                    } else {
+                        // No SQL available, assume not unique to be safe
+                        false
+                    }
+                } else {
+                    // Tables: is_unique doesn't apply, set to false
+                    false
+                };
+
                 return Ok(Some(BTreeInfo {
                     root_page,
-                    name: Some(name),
+                    name: Some(name.clone()),
                     is_table: obj_type == "table",
+                    is_unique,
                 }));
             }
         }
