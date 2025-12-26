@@ -54,6 +54,11 @@ pub fn print_issue(issue: &ValidationIssue) {
     }
 
     println!("Validator: {}", issue.validator);
+
+    // Print the issue message
+    if !issue.message.is_empty() {
+        println!("Message: {}", issue.message);
+    }
     println!();
 
     // Print duplicate details if present
@@ -115,15 +120,14 @@ fn print_key_duplicate(dup: &DuplicateEntry<IndexKey>) {
 pub fn print_summary(issues: &[ValidationIssue], total_commits: u64) {
     println!("{}", "=".repeat(80));
 
-    let total_duplicates: usize = issues.iter().map(|i| i.duplicate_count()).sum();
-    let base_duplicates = issues
+    let total_issues = issues.len();
+    let base_issues = issues
         .iter()
         .filter(|i| i.commit_index.is_none())
-        .map(|i| i.duplicate_count())
-        .sum::<usize>();
-    let wal_duplicates = total_duplicates - base_duplicates;
+        .count();
+    let wal_issues = total_issues - base_issues;
 
-    if total_duplicates == 0 {
+    if total_issues == 0 {
         println!(
             "{}",
             "No issues found - database appears valid!".green().bold()
@@ -132,14 +136,14 @@ pub fn print_summary(issues: &[ValidationIssue], total_commits: u64) {
         println!(
             "{}: {} issue(s) found",
             "Summary".bold(),
-            total_duplicates.to_string().red()
+            total_issues.to_string().red()
         );
 
-        if base_duplicates > 0 {
-            println!("  - {} in base database", base_duplicates);
+        if base_issues > 0 {
+            println!("  - {} in base database", base_issues);
         }
-        if wal_duplicates > 0 {
-            println!("  - {} in WAL commits", wal_duplicates);
+        if wal_issues > 0 {
+            println!("  - {} in WAL commits", wal_issues);
         }
     }
 

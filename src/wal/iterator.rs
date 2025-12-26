@@ -30,7 +30,20 @@ pub struct CommitIterator {
 
 impl CommitIterator {
     /// Create a new commit iterator for a WAL file
-    pub fn new(path: &Path) -> Result<Self> {
+    /// Returns None if the WAL file is empty (no commits)
+    pub fn new(path: &Path) -> Result<Option<Self>> {
+        let file_size = std::fs::metadata(path)?.len();
+
+        // Empty WAL file - no commits to process
+        if file_size == 0 {
+            return Ok(None);
+        }
+
+        // WAL header is 32 bytes minimum
+        if file_size < 32 {
+            return Err(crate::error::WalValidatorError::UnexpectedEof);
+        }
+
         let mut file = File::open(path)?;
 
         // Read and parse WAL header
@@ -42,7 +55,7 @@ impl CommitIterator {
         // NOT the salt values
         let initial_checksum = (wal_header.checksum1, wal_header.checksum2);
 
-        Ok(CommitIterator {
+        Ok(Some(CommitIterator {
             file,
             page_size: wal_header.page_size,
             wal_header,
@@ -51,7 +64,7 @@ impl CommitIterator {
             pending_frames: Vec::new(),
             current_checksum: initial_checksum,
             finished: false,
-        })
+        }))
     }
 
     /// Get a reference to the WAL header

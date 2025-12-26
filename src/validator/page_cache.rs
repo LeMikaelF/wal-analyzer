@@ -41,13 +41,15 @@ impl PageCache {
         }
 
         // Fall back to base database
-        if page_num <= self.db_page_count {
-            return self.page_reader.read_page(page_num);
+        match self.page_reader.read_page(page_num) {
+            Ok(page) => Ok(page),
+            Err(crate::error::WalValidatorError::PageNotFound { .. }) => {
+                // Page doesn't exist in base DB file (may only exist in WAL)
+                // Return a zeroed page
+                Ok(vec![0u8; self.page_size as usize])
+            }
+            Err(e) => Err(e),
         }
-
-        // Page doesn't exist in base DB and not in overlay
-        // Return a zeroed page (this can happen for newly created pages)
-        Ok(vec![0u8; self.page_size as usize])
     }
 
     /// Get the frame index that last modified a page (None if from base DB)

@@ -66,28 +66,28 @@ pub fn validate(
     }
 
     // Open WAL and iterate through commits
-    let commit_iter = CommitIterator::new(wal_path)?;
+    if let Some(commit_iter) = CommitIterator::new(wal_path)? {
+        // Verify page sizes match
+        if commit_iter.wal_header().page_size != db_header.page_size {
+            return Err(WalValidatorError::PageSizeMismatch {
+                db_size: db_header.page_size,
+                wal_size: commit_iter.wal_header().page_size,
+            });
+        }
 
-    // Verify page sizes match
-    if commit_iter.wal_header().page_size != db_header.page_size {
-        return Err(WalValidatorError::PageSizeMismatch {
-            db_size: db_header.page_size,
-            wal_size: commit_iter.wal_header().page_size,
-        });
-    }
+        for commit_result in commit_iter {
+            let commit = commit_result?;
+            total_commits += 1;
 
-    for commit_result in commit_iter {
-        let commit = commit_result?;
-        total_commits += 1;
+            // Apply commit to page cache
+            page_cache.apply_commit(&commit);
 
-        // Apply commit to page cache
-        page_cache.apply_commit(&commit);
-
-        // Run all validators
-        let mut ctx = ValidationContext::new(&mut page_cache, Some(commit.index), config);
-        for validator in &mut validators {
-            let issues = validator.validate(&mut ctx)?;
-            all_issues.extend(issues);
+            // Run all validators
+            let mut ctx = ValidationContext::new(&mut page_cache, Some(commit.index), config);
+            for validator in &mut validators {
+                let issues = validator.validate(&mut ctx)?;
+                all_issues.extend(issues);
+            }
         }
     }
 
