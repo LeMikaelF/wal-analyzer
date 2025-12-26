@@ -29,10 +29,12 @@
 
 pub mod duplicate_index_key;
 pub mod duplicate_rowid;
+pub mod index_integrity;
 pub mod issue;
 
 pub use duplicate_index_key::DuplicateIndexKeyValidator;
 pub use duplicate_rowid::DuplicateRowidValidator;
+pub use index_integrity::IndexIntegrityValidator;
 pub use issue::{DuplicateDetails, DuplicateEntry, IssueLocation, Severity, ValidationIssue};
 
 use crate::btree::BTreeScanner;
@@ -107,6 +109,7 @@ pub fn default_validators() -> Vec<Box<dyn Validator>> {
     vec![
         Box::new(DuplicateRowidValidator::new()),
         Box::new(DuplicateIndexKeyValidator::new()),
+        Box::new(IndexIntegrityValidator::new()),
     ]
 }
 

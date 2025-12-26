@@ -133,3 +133,78 @@ pub fn extract_index_key(payload: &[u8]) -> Result<IndexKey> {
         raw: payload[..key_end].to_vec(),
     })
 }
+
+/// Extract the rowid from an index cell payload
+/// For indexes, the rowid is stored as the last column
+pub fn extract_index_rowid(payload: &[u8]) -> Result<i64> {
+    use byteorder::{BigEndian, ByteOrder};
+
+    // Parse the record header to find column boundaries
+    let (serial_types, header_size) = parse_record_header(payload)?;
+
+    if serial_types.is_empty() {
+        return Err(WalValidatorError::UnexpectedEof);
+    }
+
+    // Calculate offset to the last column (rowid)
+    let key_columns = if serial_types.len() > 1 {
+        &serial_types[..serial_types.len() - 1]
+    } else {
+        return Err(WalValidatorError::UnexpectedEof);
+    };
+
+    let key_size: usize = key_columns.iter().map(|&st| serial_type_size(st)).sum();
+    let rowid_offset = header_size + key_size;
+
+    // Get the serial type of the last column (rowid)
+    let rowid_serial_type = *serial_types.last().unwrap();
+
+    // Parse the rowid based on its serial type
+    let rowid = match rowid_serial_type {
+        0 => return Err(WalValidatorError::UnexpectedEof), // NULL rowid shouldn't happen
+        1 => {
+            if rowid_offset >= payload.len() {
+                return Err(WalValidatorError::UnexpectedEof);
+            }
+            payload[rowid_offset] as i8 as i64
+        }
+        2 => {
+            if rowid_offset + 2 > payload.len() {
+                return Err(WalValidatorError::UnexpectedEof);
+            }
+            BigEndian::read_i16(&payload[rowid_offset..rowid_offset + 2]) as i64
+        }
+        3 => {
+            if rowid_offset + 3 > payload.len() {
+                return Err(WalValidatorError::UnexpectedEof);
+            }
+            let b = &payload[rowid_offset..rowid_offset + 3];
+            ((b[0] as i32) << 16 | (b[1] as i32) << 8 | b[2] as i32) as i64
+        }
+        4 => {
+            if rowid_offset + 4 > payload.len() {
+                return Err(WalValidatorError::UnexpectedEof);
+            }
+            BigEndian::read_i32(&payload[rowid_offset..rowid_offset + 4]) as i64
+        }
+        5 => {
+            if rowid_offset + 6 > payload.len() {
+                return Err(WalValidatorError::UnexpectedEof);
+            }
+            let mut buf = [0u8; 8];
+            buf[2..8].copy_from_slice(&payload[rowid_offset..rowid_offset + 6]);
+            i64::from_be_bytes(buf) >> 16
+        }
+        6 => {
+            if rowid_offset + 8 > payload.len() {
+                return Err(WalValidatorError::UnexpectedEof);
+            }
+            BigEndian::read_i64(&payload[rowid_offset..rowid_offset + 8])
+        }
+        8 => 0,
+        9 => 1,
+        _ => return Err(WalValidatorError::UnexpectedEof), // Unexpected type for rowid
+    };
+
+    Ok(rowid)
+}

@@ -1,6 +1,6 @@
 use byteorder::{BigEndian, ByteOrder};
 
-use crate::btree::cell::{extract_index_key, parse_varint, IndexKey};
+use crate::btree::cell::{extract_index_key, extract_index_rowid, parse_varint, IndexKey};
 use crate::btree::page::{BTreePageHeader, BTreePageType};
 use crate::error::{Result, WalValidatorError};
 use crate::validator::PageCache;
@@ -12,6 +12,10 @@ pub struct BTreeInfo {
     pub root_page: u32,
     /// Table or index name (if known)
     pub name: Option<String>,
+    /// For indexes: the table this index belongs to
+    pub tbl_name: Option<String>,
+    /// The SQL statement that created this object (for indexes: used to detect partial/expression indexes)
+    pub sql: Option<String>,
     /// True if this is a table, false if index
     pub is_table: bool,
     /// True if this is a unique index (only relevant for indexes)
@@ -156,10 +160,13 @@ impl<'a> BTreeScanner<'a> {
         // Column 1: name (TEXT)
         let name_col = self.read_text_column(payload, &serial_types, &column_offsets, 1)?;
 
+        // Column 2: tbl_name (TEXT) - for indexes, this is the table they belong to
+        let tbl_name_col = self.read_text_column(payload, &serial_types, &column_offsets, 2)?;
+
         // Column 3: rootpage (INTEGER)
         let rootpage = self.read_int_column(payload, &serial_types, &column_offsets, 3)?;
 
-        // Column 4: sql (TEXT) - used to determine if index is unique
+        // Column 4: sql (TEXT) - used to determine if index is unique, partial, or expression-based
         let sql_col = self.read_text_column(payload, &serial_types, &column_offsets, 4)?;
 
         if let (Some(obj_type), Some(ref name), Some(root_page)) = (type_col, name_col, rootpage) {
@@ -187,6 +194,8 @@ impl<'a> BTreeScanner<'a> {
                 return Ok(Some(BTreeInfo {
                     root_page,
                     name: Some(name.clone()),
+                    tbl_name: tbl_name_col,
+                    sql: sql_col,
                     is_table: obj_type == "table",
                     is_unique,
                 }));
@@ -423,6 +432,69 @@ impl<'a> BTreeScanner<'a> {
         }
 
         Ok(keys)
+    }
+
+    /// Collect all rowids referenced by an index B-tree
+    /// Returns the rowids that the index entries point to (the last column in each index entry)
+    pub fn collect_index_rowids(&mut self, root_page: u32) -> Result<Vec<i64>> {
+        let mut rowids = Vec::new();
+        let mut stack = vec![root_page];
+
+        while let Some(page_num) = stack.pop() {
+            let page_data = self.page_cache.get_page(page_num)?;
+            let (header, _) = BTreePageHeader::parse(&page_data, page_num)?;
+
+            match header.page_type {
+                BTreePageType::IndexLeaf => {
+                    let cell_pointers = header.get_cell_pointers(&page_data, page_num)?;
+
+                    for &cell_ptr in &cell_pointers {
+                        let cell_offset = cell_ptr as usize;
+                        if cell_offset >= page_data.len() {
+                            continue;
+                        }
+
+                        let cell_data = &page_data[cell_offset..];
+
+                        // Parse payload size varint
+                        let (payload_size, payload_len) = parse_varint(cell_data)?;
+                        let payload_size = payload_size as usize;
+
+                        // The payload starts right after the payload size
+                        if payload_len + payload_size > cell_data.len() {
+                            continue; // Overflow, skip
+                        }
+
+                        let payload = &cell_data[payload_len..payload_len + payload_size];
+                        if let Ok(rowid) = extract_index_rowid(payload) {
+                            rowids.push(rowid);
+                        }
+                    }
+                }
+                BTreePageType::IndexInterior => {
+                    let cell_pointers = header.get_cell_pointers(&page_data, page_num)?;
+
+                    for &cell_ptr in &cell_pointers {
+                        let cell_offset = cell_ptr as usize;
+                        if cell_offset + 4 > page_data.len() {
+                            continue;
+                        }
+
+                        // First 4 bytes are left child pointer
+                        let left_child =
+                            BigEndian::read_u32(&page_data[cell_offset..cell_offset + 4]);
+                        stack.push(left_child);
+                    }
+
+                    if let Some(right_child) = header.right_child {
+                        stack.push(right_child);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        Ok(rowids)
     }
 }
 
