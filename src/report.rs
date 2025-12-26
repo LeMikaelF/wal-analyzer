@@ -1,10 +1,12 @@
 use colored::Colorize;
 use std::path::Path;
 
-use crate::btree::IndexKey;
-use crate::validator::{DuplicateEntry, DuplicateReport, DuplicateType};
+use crate::btree::{IndexKey, RowidLocation};
+use crate::validators::{
+    DuplicateDetails, DuplicateEntry, IssueLocation, Severity, ValidationIssue,
+};
 
-/// Print the report header
+/// Print the report header.
 pub fn print_header(db_path: &Path, wal_path: &Path, page_size: u32) {
     println!("{}", "=".repeat(80));
     println!("{}", "SQLite WAL Validator Report".bold());
@@ -15,52 +17,63 @@ pub fn print_header(db_path: &Path, wal_path: &Path, page_size: u32) {
     println!();
 }
 
-/// Print a duplicate report
-pub fn print_duplicate_report(report: &DuplicateReport) {
+/// Print a validation issue.
+pub fn print_issue(issue: &ValidationIssue) {
     println!("{}", "-".repeat(80));
 
-    let location_str = match report.commit_index {
+    let location_str = match issue.commit_index {
         Some(idx) => format!("Commit #{}", idx),
         None => "Base Database State".to_string(),
     };
 
-    println!(
-        "{} in {}",
-        "DUPLICATE FOUND".red().bold(),
-        location_str.yellow()
-    );
-    println!("{}", "-".repeat(80));
-
-    let type_str = match report.duplicate_type {
-        DuplicateType::TableRowid => "Table",
-        DuplicateType::IndexKey => "Index",
+    let severity_str = match issue.severity {
+        Severity::Error => "ERROR".red().bold(),
+        Severity::Warning => "WARNING".yellow().bold(),
+        Severity::Info => "INFO".blue().bold(),
     };
 
-    let name = report
-        .name
-        .as_deref()
-        .unwrap_or("<unknown>");
+    println!("{} in {}", severity_str, location_str.yellow());
+    println!("{}", "-".repeat(80));
 
-    println!(
-        "{}: {} (root page {})",
-        type_str,
-        name.cyan(),
-        report.btree_root
-    );
-    println!();
-
-    // Print rowid duplicates
-    for dup in &report.rowid_duplicates {
-        print_rowid_duplicate(dup);
+    // Print location info
+    match &issue.location {
+        IssueLocation::Table { name, root_page } => {
+            let name_str = name.as_deref().unwrap_or("<unknown>");
+            println!("Table: {} (root page {})", name_str.cyan(), root_page);
+        }
+        IssueLocation::Index { name, root_page } => {
+            let name_str = name.as_deref().unwrap_or("<unknown>");
+            println!("Index: {} (root page {})", name_str.cyan(), root_page);
+        }
+        IssueLocation::Page { page_number } => {
+            println!("Page: {}", page_number);
+        }
+        IssueLocation::Database => {
+            println!("Location: Database-wide");
+        }
     }
 
-    // Print key duplicates
-    for dup in &report.key_duplicates {
-        print_key_duplicate(dup);
+    println!("Validator: {}", issue.validator);
+    println!();
+
+    // Print duplicate details if present
+    if let Some(details) = &issue.duplicate_details {
+        match details {
+            DuplicateDetails::Rowid(dups) => {
+                for dup in dups {
+                    print_rowid_duplicate(dup);
+                }
+            }
+            DuplicateDetails::IndexKey(dups) => {
+                for dup in dups {
+                    print_key_duplicate(dup);
+                }
+            }
+        }
     }
 }
 
-fn format_location(loc: &crate::btree::RowidLocation, is_intra_page_last: bool) -> String {
+fn format_location(loc: &RowidLocation, is_intra_page_last: bool) -> String {
     let frame_str = match loc.frame_index {
         Some(idx) => format!(" (frame {})", idx),
         None => " (base db)".to_string(),
@@ -98,26 +111,26 @@ fn print_key_duplicate(dup: &DuplicateEntry<IndexKey>) {
     println!();
 }
 
-/// Print the summary footer
-pub fn print_summary(reports: &[DuplicateReport], total_commits: u64) {
+/// Print the summary footer.
+pub fn print_summary(issues: &[ValidationIssue], total_commits: u64) {
     println!("{}", "=".repeat(80));
 
-    let total_duplicates: usize = reports.iter().map(|r| r.duplicate_count()).sum();
-    let base_duplicates = reports
+    let total_duplicates: usize = issues.iter().map(|i| i.duplicate_count()).sum();
+    let base_duplicates = issues
         .iter()
-        .filter(|r| r.commit_index.is_none())
-        .map(|r| r.duplicate_count())
+        .filter(|i| i.commit_index.is_none())
+        .map(|i| i.duplicate_count())
         .sum::<usize>();
     let wal_duplicates = total_duplicates - base_duplicates;
 
     if total_duplicates == 0 {
         println!(
             "{}",
-            "No duplicates found - database appears valid!".green().bold()
+            "No issues found - database appears valid!".green().bold()
         );
     } else {
         println!(
-            "{}: {} duplicate(s) found",
+            "{}: {} issue(s) found",
             "Summary".bold(),
             total_duplicates.to_string().red()
         );

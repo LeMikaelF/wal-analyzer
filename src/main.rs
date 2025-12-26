@@ -4,7 +4,8 @@ use std::process::ExitCode;
 use clap::Parser;
 
 use wal_validator::db::DbHeader;
-use wal_validator::report::{print_duplicate_report, print_header, print_summary};
+use wal_validator::report::{print_header, print_issue, print_summary};
+use wal_validator::validators::ValidatorConfig;
 
 #[derive(Parser, Debug)]
 #[command(name = "wal-validator")]
@@ -62,22 +63,27 @@ fn main() -> ExitCode {
     // Print header
     print_header(&cli.database, &wal_path, page_size);
 
+    // Build validator config
+    let config = ValidatorConfig {
+        check_indexes: cli.check_indexes,
+    };
+
     // Run validation
-    match wal_validator::validate(&cli.database, &wal_path, cli.check_indexes) {
-        Ok((reports, total_commits)) => {
-            // Print each duplicate report
-            for report in &reports {
-                print_duplicate_report(report);
+    match wal_validator::validate(&cli.database, &wal_path, &config) {
+        Ok((issues, total_commits)) => {
+            // Print each issue
+            for issue in &issues {
+                print_issue(issue);
             }
 
             // Print summary
-            print_summary(&reports, total_commits);
+            print_summary(&issues, total_commits);
 
-            // Exit with error code if duplicates were found
-            if reports.is_empty() {
+            // Exit with error code if issues were found
+            if issues.is_empty() {
                 ExitCode::SUCCESS
             } else {
-                ExitCode::from(2) // Duplicates found
+                ExitCode::from(2) // Issues found
             }
         }
         Err(e) => {

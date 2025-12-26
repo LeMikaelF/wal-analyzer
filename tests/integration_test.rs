@@ -1,6 +1,7 @@
 use rusqlite::{Connection, OpenFlags};
 use std::path::PathBuf;
 use tempfile::TempDir;
+use wal_validator::validators::ValidatorConfig;
 
 fn create_test_db_with_wal(dir: &TempDir) -> (PathBuf, PathBuf) {
     let db_path = dir.path().join("test.db");
@@ -47,7 +48,8 @@ fn test_validate_no_duplicates() {
     }
 
     // Run validation (don't check indexes)
-    let result = wal_validator::validate(&db_path, &wal_path, false);
+    let config = ValidatorConfig::default();
+    let result = wal_validator::validate(&db_path, &wal_path, &config);
     match result {
         Ok((reports, commits)) => {
             println!("Processed {} commits", commits);
