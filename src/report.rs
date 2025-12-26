@@ -54,11 +54,7 @@ pub fn print_issue(issue: &ValidationIssue) {
     }
 
     println!("Validator: {}", issue.validator);
-
-    // Print the issue message
-    if !issue.message.is_empty() {
-        println!("Message: {}", issue.message);
-    }
+    println!("Message: {}", issue.message);
     println!();
 
     // Print duplicate details if present
